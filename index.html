@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0F766E">
-<title>الكاميرا الذكية</title>
+<title>تصوير تلقائي</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap">
@@ -69,13 +69,25 @@ input.in{width:100%;min-height:58px;border:2px solid #C9C5BD;border-radius:12px;
 textarea.in{min-height:110px;resize:vertical}
 #toast{position:fixed;left:14px;right:14px;bottom:90px;background:#222;color:#fff;padding:14px;border-radius:14px;font-size:20px;text-align:center;z-index:50}
 #sheet{position:static;max-height:46%;overflow-y:auto;background:rgba(10,22,48,.93);border-radius:16px;padding:10px;display:flex;flex-direction:column;gap:10px}
+
+#smartControls{position:absolute;z-index:8;top:8px;left:8px;width:min(310px,calc(100% - 16px));max-height:42%;overflow:auto;background:rgba(12,16,30,.88);color:#fff;border:1px solid #6d5dfc;border-radius:14px;padding:8px;font-size:13px;backdrop-filter:blur(10px)}
+#smartControls .scrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:5px 0}
+#smartControls select,#smartControls input[type=url]{min-width:0;flex:1;width:100%;padding:8px;border-radius:8px;border:1px solid #7182a8;background:#fff;color:#111;font-size:13px}
+#smartControls button{border:0;border-radius:8px;padding:8px 10px;background:#6948e8;color:white;font-weight:700}
+#smartControls details{border-top:1px solid #59617b;padding-top:6px;margin-top:6px}
+#smartControls summary{cursor:pointer;font-weight:800;padding:4px}
+#smartControls label{display:block;margin:6px 0}
+#smartControls input[type=range]{width:100%;accent-color:#a78bfa}
+#smartControls p,#smartControls small{line-height:1.5;color:#e3e8ff}
+@media(max-width:650px){#smartControls{top:5px;left:5px;width:min(260px,calc(100% - 10px));max-height:38%;font-size:11px}#smartControls button{padding:6px 8px}}
+
 </style>
 </head>
 <body>
 
 <button id="topback" hidden>→ رجوع</button>
 <section id="home" class="center">
-<div class="grow col center"><h1>الكاميرا الذكية</h1><p>يسجّل الفيديو فقط حين يظهر الشخص الذي تختاره، في أي مكان من الكادر.</p></div>
+<div class="grow col center"><h1>تصوير تلقائي</h1><p>يسجّل الفيديو فقط حين يظهر الشخص الذي تختاره، في أي مكان من الكادر.</p></div>
 <div class="col"><button class="main" id="goStart">ابدأ تصوير جديد</button><button id="goData">بياناتي (أسماء وإحصائيات)</button><button id="goVids">فيديوهاتي</button><button id="goHelp">شرح الأزرار</button></div>
 <p style="text-align:center;font-size:15px">الإصدار 26</p>
 </section>
@@ -102,6 +114,17 @@ textarea.in{min-height:110px;resize:vertical}
 <div class="bar"><button id="back3" style="width:124px;min-height:54px;font-size:20px;background:#fff;color:#111;border-color:#fff">→ رجوع</button><div class="pill" id="st"><span class="dot"></span><span id="stt">بانتظار الشخص</span></div><b id="tm">00:00</b><button id="ui" style="width:auto;min-width:92px;min-height:50px;font-size:16px;padding:0 8px">شاشة كاملة</button></div>
 <div id="stage">
 <video id="v" playsinline muted></video><canvas id="cv" hidden></canvas>
+<div id="smartControls" dir="rtl">
+ <div class="scrow"><label for="cameraSelect">الكاميرا المتصلة</label><select id="cameraSelect"><option value="">الكاميرا الافتراضية</option></select><button id="refreshCams" type="button">تحديث</button></div>
+ <details><summary>كاميرا Wi‑Fi / بث شبكي</summary><p>ألصق رابط بث مباشر يدعمه المتصفح (مثل MP4 أو WebM أو HLS على الأجهزة المتوافقة). بث RTSP يحتاج وسيط تحويل إلى WebRTC أو HLS.</p><input id="networkUrl" type="url" placeholder="https://عنوان-البث/stream.m3u8"/><div class="scrow"><button id="connectNetwork" type="button">اتصال بالبث</button><button id="useDeviceCam" type="button">استخدام كاميرا الجهاز</button></div></details>
+ <details id="transformPanel"><summary>تحريك ثلاثي الأبعاد للشخص</summary>
+ <label>دوران X <input id="rotX" type="range" min="-80" max="80" value="0"></label>
+ <label>دوران Y <input id="rotY" type="range" min="-80" max="80" value="0"></label>
+ <label>دوران Z <input id="rotZ" type="range" min="-180" max="180" value="0"></label>
+ <div class="scrow"><button id="flipX" type="button">قلب أفقي</button><button id="flipY" type="button">قلب رأسي</button><button id="reset3D" type="button">إعادة الضبط</button></div>
+ <small>تأثير منظور ثلاثي الأبعاد على طبقة الشخص المعزولة، وليس إنشاء مجسم 3D حقيقي.</small>
+ </details>
+</div>
 <div id="side">
 <div class="g"><span>التقريب</span><button class="sb" id="zin">قرّب ＋</button><button class="sb" id="zout">بعّد －</button></div>
 <div class="g"><span>الصورة</span><button class="sb" id="rot">تدوير ⟳</button><button class="sb" id="mir">مرآة ⇄</button><button class="sb" id="rl">ميل ↺</button><button class="sb" id="rr2">ميل ↻</button></div>
@@ -186,6 +209,7 @@ let lastBox=null,lastT=0,lastVer=0,lastLearn=0,zoom=1,DZ=1,drawOn=false,gen=0,er
 let FM=+(localStorage.getItem('fm3')||0),people=[],sel=new Set(),base=0,dataset=null,ROT=0,ROLL=0,MIR=false,theme=+(localStorage.getItem('theme1')||0),selCols=new Set();
 let actx,dest,gn,msrc,vol=1,muted=false;
 let bg=null,bgType='',seg=null,segBusy=false,lastSeg=0,ps=.6,pxc=.5,pyc=.6,ovl=null,lastPaint=0,curS='home';
+let selectedCameraId='',networkMode=false,networkObjectUrl='',rotX3=0,rotY3=0,rotZ3=0,flipX3=false,flipY3=false;
 const bsc=document.createElement('canvas'),bsx=bsc.getContext('2d'),cvs=$('#cv'),cx=cvs.getContext('2d'),bgv=$('#bgv'),pc=document.createElement('canvas'),pcx=pc.getContext('2d'),dc=document.createElement('canvas'),dx=dc.getContext('2d');
 
 try{const s=JSON.parse(localStorage.getItem('people2')||'null');if(s){people=s.p||[];sel=new Set(s.s||[])}
@@ -301,11 +325,34 @@ $('#next').onclick=async()=>{
 async function startCam(){
  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}
  const v=$('#v');v.srcObject=null;const P=por();
- stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:facing},width:{ideal:P?720:960},height:{ideal:P?960:720},frameRate:{ideal:24,max:30}},audio:false});
- v.srcObject=stream;await v.play();autoRot();
+ const videoConstraint=selectedCameraId?{deviceId:{exact:selectedCameraId},width:{ideal:P?720:960},height:{ideal:P?960:720},frameRate:{ideal:24,max:30}}:{facingMode:{ideal:facing},width:{ideal:P?720:960},height:{ideal:P?960:720},frameRate:{ideal:24,max:30}};
+ stream=await navigator.mediaDevices.getUserMedia({video:videoConstraint,audio:false});
+ networkMode=false;v.removeAttribute('src');v.srcObject=stream;await v.play();autoRot();await refreshCameraList();
  try{const t=stream.getVideoTracks()[0],c=t.getCapabilities&&t.getCapabilities();if(c&&c.zoom){await t.applyConstraints({advanced:[{zoom:c.zoom.min}]});zoom=c.zoom.min}else zoom=1}catch(e){zoom=1}
  DZ=1;lastBox=null;lastVer=0;updPrev();
 }
+async function refreshCameraList(){
+ const sel=$('#cameraSelect');if(!sel||!navigator.mediaDevices?.enumerateDevices)return;
+ try{const devices=await navigator.mediaDevices.enumerateDevices();const cams=devices.filter(d=>d.kind==='videoinput');const current=selectedCameraId|| (stream&&stream.getVideoTracks()[0]?.getSettings().deviceId)||'';
+ sel.innerHTML='';const opt=document.createElement('option');opt.value='';opt.textContent='اختيار تلقائي';sel.appendChild(opt);
+ cams.forEach((d,i)=>{const o=document.createElement('option');o.value=d.deviceId;o.textContent=d.label||('كاميرا '+(i+1));sel.appendChild(o)});sel.value=current;
+ }catch(e){}
+}
+$('#refreshCams').onclick=async()=>{try{if(!stream)await navigator.mediaDevices.getUserMedia({video:true,audio:false}).then(x=>x.getTracks().forEach(t=>t.stop()));await refreshCameraList();flash('تم تحديث قائمة الكاميرات')}catch(e){flash('اسمح بالوصول للكاميرا أولاً')}};
+$('#cameraSelect').onchange=async e=>{selectedCameraId=e.target.value;networkMode=false;if(running){try{if(rec&&rec.state==='recording'){rec.pause();setStatus(false)}await startCam();look(++gen);flash('تم تبديل الكاميرا')}catch(er){flash('تعذّر فتح الكاميرا المختارة')}}};
+$('#connectNetwork').onclick=async()=>{const url=$('#networkUrl').value.trim();if(!url)return flash('أدخل رابط بث الكاميرا');try{const u=new URL(url);if(!['http:','https:'].includes(u.protocol))throw Error('protocol');if(location.protocol==='https:'&&u.protocol==='http:')throw Error('mixed');if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}const v=$('#v');v.pause();v.srcObject=null;v.crossOrigin='anonymous';v.src=u.href;v.load();await v.play();networkMode=true;selectedCameraId='';$('#cameraSelect').value='';autoRot();look(++gen);flash('تم الاتصال بالبث الشبكي')}catch(e){flash(e.message==='mixed'?'المتصفح يمنع بث HTTP غير المشفر داخل صفحة HTTPS. استخدم HTTPS أو WebRTC آمن.':'تعذّر تشغيل الرابط؛ تأكد أنه بث فيديو يدعمه المتصفح')} };
+$('#useDeviceCam').onclick=async()=>{networkMode=false;try{await startCam();look(++gen);flash('تم الرجوع إلى كاميرا الجهاز')}catch(e){flash('تعذّر تشغيل كاميرا الجهاز')}};
+function drawPerson3D(ctx){
+ const W=cvs.width,H=cvs.height,pw=W*ps,ph=H*ps;
+ const ax=rotX3*Math.PI/180,ay=rotY3*Math.PI/180,az=rotZ3*Math.PI/180;
+ // إسقاط منظور مبسّط: X/Y تضغطان المحور المقابل وتضيفان ميلاً، وZ دوران مستوٍ.
+ const sx=Math.max(.12,Math.abs(Math.cos(ay)))*(flipX3?-1:1),sy=Math.max(.12,Math.abs(Math.cos(ax)))*(flipY3?-1:1);
+ const kx=Math.sin(ay)*.38,ky=-Math.sin(ax)*.38;
+ ctx.save();ctx.translate(pxc*W,pyc*H);ctx.rotate(az);ctx.transform(sx,ky,kx,sy,0,0);ctx.drawImage(pc,-pw/2,-ph/2,pw,ph);ctx.restore();
+}
+['rotX','rotY','rotZ'].forEach(id=>$('#'+id).addEventListener('input',e=>{const v=+e.target.value;if(id==='rotX')rotX3=v;if(id==='rotY')rotY3=v;if(id==='rotZ')rotZ3=v}));
+$('#flipX').onclick=()=>flipX3=!flipX3;$('#flipY').onclick=()=>flipY3=!flipY3;
+$('#reset3D').onclick=()=>{rotX3=rotY3=rotZ3=0;flipX3=flipY3=false;['rotX','rotY','rotZ'].forEach(id=>$('#'+id).value=0)};
 $('#flip').onclick=async()=>{
  if(!running)return;const prev=facing;facing=facing==='user'?'environment':'user';flash('جاري قلب الكاميرا...');gen++;lastSeen=0;if(rec&&rec.state==='recording'){rec.pause();setStatus(false)}
  try{await startCam()}catch(e){facing=prev;try{await startCam()}catch(e2){}flash('تعذّر فتح الكاميرا الأخرى')}
@@ -491,8 +538,7 @@ function onSeg(r){
  else if(bgType==='img'&&bg.width&&bg.height)cover(bg,bg.width,bg.height,1);
  else{cx.fillStyle='#111';cx.fillRect(0,0,W,H)}
  // صغّر/كبّر الشخص مع الحفاظ على النسبة، لا تمدّه لملء عرض وارتفاع مستقلين.
- const pw=W*ps,ph=H*ps;
- cx.drawImage(pc,pxc*W-pw/2,pyc*H-ph/2,pw,ph);
+ drawPerson3D(cx);
  drawOvl();
 }
 let segP=null;
@@ -746,6 +792,7 @@ function finish(){
   if(wake)wake.release().catch(()=>{});
   const done=()=>{
    if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}
+   if(networkMode){$('#v').pause();$('#v').removeAttribute('src');$('#v').load();networkMode=false}
    if(astream){astream.getTracks().forEach(t=>t.stop());astream=null}
    if(rec&&chunks.length&&recMs>0){
     const type=(rec.mimeType||mime||'video/webm').split(';')[0];
@@ -785,6 +832,8 @@ document.addEventListener('visibilitychange',async()=>{
 });
 setTimeout(()=>{if(window.faceapi)loadModels().catch(()=>{})},1200); // تحميل أداة التعرف مسبقاً في الخلفية
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+if(navigator.mediaDevices?.addEventListener)navigator.mediaDevices.addEventListener('devicechange',refreshCameraList);
+refreshCameraList();
 </script>
 </body>
 </html>
