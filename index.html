@@ -562,6 +562,34 @@ function onSeg(r){
   a[i]=a[i+1]=a[i+2]=255;
   a[i+3]=Math.round(t*255);
  }
+ // تنظيف البقع المنفصلة: نبحث عن مكوّنات القناع على شبكة مصغّرة،
+ // ونحتفظ بالمكوّنات المتصلة الكبيرة بالشخص فقط. هذا يستهدف الورد/الشوائب
+ // التي يصنّفها النموذج خطأً كجزء مستقل من المقدمة، دون حذف لون معيّن.
+ const step=4,mw=Math.ceil(W/step),mh=Math.ceil(H/step),n=mw*mh;
+ const labels=new Int32Array(n),queue=new Int32Array(n),sizes=[0];
+ let comp=0,largest=0;
+ for(let gy=0;gy<mh;gy++)for(let gx=0;gx<mw;gx++){
+  const gi=gy*mw+gx;if(labels[gi])continue;
+  const x=Math.min(W-1,gx*step),y=Math.min(H-1,gy*step),ai=(y*W+x)*4+3;
+  if(a[ai]<110){labels[gi]=-1;continue}
+  comp++;let head=0,tail=0;queue[tail++]=gi;labels[gi]=comp;
+  while(head<tail){const cur=queue[head++],cy=(cur/mw)|0,cx0=cur-cy*mw;sizes[comp]=(sizes[comp]||0)+1;
+   for(let oy=-1;oy<=1;oy++)for(let ox=-1;ox<=1;ox++){
+    if(!ox&&!oy)continue;const nx=cx0+ox,ny=cy+oy;if(nx<0||ny<0||nx>=mw||ny>=mh)continue;
+    const ni=ny*mw+nx;if(labels[ni])continue;
+    const sx=Math.min(W-1,nx*step),sy=Math.min(H-1,ny*step);
+    if(a[(sy*W+sx)*4+3]>=110){labels[ni]=comp;queue[tail++]=ni}else labels[ni]=-1;
+   }
+  }
+  if(sizes[comp]>largest)largest=sizes[comp];
+ }
+ if(largest){const minIsland=Math.max(10,largest*.025),keep=new Uint8Array(comp+1);
+  for(let c=1;c<=comp;c++)if((sizes[c]||0)>=minIsland)keep[c]=1;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+   const li=labels[Math.min(mh-1,(y/step)|0)*mw+Math.min(mw-1,(x/step)|0)];
+   if(li<=0||!keep[li])a[(y*W+x)*4+3]=0;
+  }
+ }
  // إذا لم يُنتج النموذج قناعًا صالحًا، لا نعرض الخلفية الجديدة وحدها أبدًا.
  // نرجع فورًا إلى الفيديو الأصلي حتى لا يختفي الشخص.
  let foreground=0,alphaMax=0;
