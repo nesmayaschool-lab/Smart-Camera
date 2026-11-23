@@ -130,8 +130,8 @@ textarea.in{min-height:110px;resize:vertical}
  <small>تأثير منظور ثلاثي الأبعاد على طبقة الشخص المعزولة، وليس إنشاء مجسم 3D حقيقي.</small>
  </details>
  <details class="quality"><summary>تنقية الخلفية والرتوش</summary>
-  <label>قوة فصل الخلفية <output id="maskLevelText">48%</output><input id="maskLevel" type="range" min="20" max="80" value="48"></label>
-  <label>نعومة الحواف <output id="edgeSoftText">8%</output><input id="edgeSoft" type="range" min="0" max="25" value="8"></label>
+  <label>قوة فصل الخلفية <output id="maskLevelText">56%</output><input id="maskLevel" type="range" min="20" max="80" value="56"></label>
+  <label>نعومة الحواف <output id="edgeSoftText">6%</output><input id="edgeSoft" type="range" min="0" max="25" value="6"></label>
   <p>تُعالج درجات القناع نفسها، وليس لونًا بعينه؛ لذلك لا نحذف الأحمر من ملابس الشخص.</p>
  </details>
 </div>
@@ -221,7 +221,7 @@ let FM=+(localStorage.getItem('fm3')||0),people=[],sel=new Set(),base=0,dataset=
 let actx,dest,gn,msrc,vol=1,muted=false;
 let bg=null,bgType='',seg=null,segBusy=false,lastSeg=0,ps=.6,pxc=.5,pyc=.6,ovl=null,lastPaint=0,curS='home';
 let selectedCameraId='',networkMode=false,networkObjectUrl='',rotX3=0,rotY3=0,rotZ3=0,flipX3=false,flipY3=false;
-let maskLevel=.48,edgeSoft=.08,maskCanvas=document.createElement('canvas'),maskCtx=maskCanvas.getContext('2d',{willReadFrequently:true}),stickerLibrary=[],activeSticker=null;
+let maskLevel=.56,edgeSoft=.06,maskCanvas=document.createElement('canvas'),maskCtx=maskCanvas.getContext('2d',{willReadFrequently:true}),stickerLibrary=[],activeSticker=null;
 const bsc=document.createElement('canvas'),bsx=bsc.getContext('2d'),cvs=$('#cv'),cx=cvs.getContext('2d'),bgv=$('#bgv'),pc=document.createElement('canvas'),pcx=pc.getContext('2d'),dc=document.createElement('canvas'),dx=dc.getContext('2d');
 
 try{const s=JSON.parse(localStorage.getItem('people2')||'null');if(s){people=s.p||[];sel=new Set(s.s||[])}
@@ -562,28 +562,43 @@ function onSeg(r){
   a[i]=a[i+1]=a[i+2]=255;
   a[i+3]=Math.round(t*255);
  }
- // تنظيف البقع المنفصلة: نبحث عن مكوّنات القناع على شبكة مصغّرة،
- // ونحتفظ بالمكوّنات المتصلة الكبيرة بالشخص فقط. هذا يستهدف الورد/الشوائب
- // التي يصنّفها النموذج خطأً كجزء مستقل من المقدمة، دون حذف لون معيّن.
- const step=4,mw=Math.ceil(W/step),mh=Math.ceil(H/step),n=mw*mh;
+ // تنظيف محافظ لقناع الفصل: نعمل على شبكة صغيرة، ونطبق opening
+ // لإزالة الزوائد الرفيعة المتصلة بالخلفية (مثل أطراف الورد) قبل تحديد المكوّنات.
+ // لا نعتمد على لون البكسل؛ القرار مبني على ثقة نموذج الفصل فقط.
+ const step=3,mw=Math.ceil(W/step),mh=Math.ceil(H/step),n=mw*mh;
+ const binary=new Uint8Array(n),eroded=new Uint8Array(n),opened=new Uint8Array(n);
+ for(let gy=0;gy<mh;gy++)for(let gx=0;gx<mw;gx++){
+  const x=Math.min(W-1,gx*step),y=Math.min(H-1,gy*step);
+  binary[gy*mw+gx]=a[(y*W+x)*4+3]>=128?1:0;
+ }
+ // Erosion 3x3: يقطع الجسور الرفيعة التي تربط شوائب الخلفية بالشخص.
+ for(let gy=1;gy<mh-1;gy++)for(let gx=1;gx<mw-1;gx++){
+  let ok=1;
+  for(let oy=-1;oy<=1&&ok;oy++)for(let ox=-1;ox<=1;ox++)if(!binary[(gy+oy)*mw+gx+ox]){ok=0;break}
+  eroded[gy*mw+gx]=ok;
+ }
+ // Dilation 3x3 لاستعادة حدود الجسم بعد إزالة الجسور الرفيعة.
+ for(let gy=1;gy<mh-1;gy++)for(let gx=1;gx<mw-1;gx++){
+  let on=0;
+  for(let oy=-1;oy<=1&&!on;oy++)for(let ox=-1;ox<=1;ox++)if(eroded[(gy+oy)*mw+gx+ox]){on=1;break}
+  opened[gy*mw+gx]=on;
+ }
  const labels=new Int32Array(n),queue=new Int32Array(n),sizes=[0];
  let comp=0,largest=0;
- for(let gy=0;gy<mh;gy++)for(let gx=0;gx<mw;gx++){
-  const gi=gy*mw+gx;if(labels[gi])continue;
-  const x=Math.min(W-1,gx*step),y=Math.min(H-1,gy*step),ai=(y*W+x)*4+3;
-  if(a[ai]<110){labels[gi]=-1;continue}
+ for(let gi=0;gi<n;gi++){
+  if(labels[gi])continue;
+  if(!opened[gi]){labels[gi]=-1;continue}
   comp++;let head=0,tail=0;queue[tail++]=gi;labels[gi]=comp;
   while(head<tail){const cur=queue[head++],cy=(cur/mw)|0,cx0=cur-cy*mw;sizes[comp]=(sizes[comp]||0)+1;
    for(let oy=-1;oy<=1;oy++)for(let ox=-1;ox<=1;ox++){
     if(!ox&&!oy)continue;const nx=cx0+ox,ny=cy+oy;if(nx<0||ny<0||nx>=mw||ny>=mh)continue;
     const ni=ny*mw+nx;if(labels[ni])continue;
-    const sx=Math.min(W-1,nx*step),sy=Math.min(H-1,ny*step);
-    if(a[(sy*W+sx)*4+3]>=110){labels[ni]=comp;queue[tail++]=ni}else labels[ni]=-1;
+    if(opened[ni]){labels[ni]=comp;queue[tail++]=ni}else labels[ni]=-1;
    }
   }
   if(sizes[comp]>largest)largest=sizes[comp];
  }
- if(largest){const minIsland=Math.max(10,largest*.025),keep=new Uint8Array(comp+1);
+ if(largest){const minIsland=Math.max(12,largest*.035),keep=new Uint8Array(comp+1);
   for(let c=1;c<=comp;c++)if((sizes[c]||0)>=minIsland)keep[c]=1;
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){
    const li=labels[Math.min(mh-1,(y/step)|0)*mw+Math.min(mw-1,(x/step)|0)];
