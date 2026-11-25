@@ -228,9 +228,9 @@ let refs=[],ready=false,stream,astream,rec,chunks=[],running=false,lastSeen=0,fa
 let lastBox=null,lastT=0,lastVer=0,lastLearn=0,zoom=1,DZ=.82,drawOn=false,gen=0,errN=0,zt;
 let FM=+(localStorage.getItem('fm3')||0),people=[],sel=new Set(),base=0,dataset=null,ROT=0,ROLL=0,MIR=false,theme=+(localStorage.getItem('theme1')||0),selCols=new Set();
 let actx,dest,gn,msrc,vol=1,muted=false;
-let bg=null,bgType='',seg=null,segBusy=false,lastSeg=0,ps=.6,pxc=.5,pyc=.6,ovl=null,lastPaint=0,curS='home';
+let bg=null,bgType='',bgObjectUrl=null,seg=null,segBusy=false,lastSeg=0,ps=.6,pxc=.5,pyc=.6,ovl=null,lastPaint=0,curS='home';
 let selectedCameraId='',networkMode=false,networkObjectUrl='',rotX3=0,rotY3=0,rotZ3=0,flipX3=false,flipY3=false;
-let isolationOn=false,poseTask=null,poseBusy=false,lastPoseAt=0,posePeople=[],chosenPose=-1,poseMaskCanvases=[],isoBlurCanvas=document.createElement('canvas'),isoBlurCtx=isoBlurCanvas.getContext('2d'),isoMaskCanvas=document.createElement('canvas'),isoMaskCtx=isoMaskCanvas.getContext('2d'),isoLayer=document.createElement('canvas'),isoLayerCtx=isoLayer.getContext('2d'),isoUnion=document.createElement('canvas'),isoUnionCtx=isoUnion.getContext('2d'),isoOther=document.createElement('canvas'),isoOtherCtx=isoOther.getContext('2d'),isoPlate=document.createElement('canvas'),isoPlateCtx=isoPlate.getContext('2d',{willReadFrequently:true}),isoKnown=document.createElement('canvas'),isoKnownCtx=isoKnown.getContext('2d',{willReadFrequently:true}),isoFrame=document.createElement('canvas'),isoFrameCtx=isoFrame.getContext('2d');
+let isolationOn=false,poseTask=null,poseBusy=false,lastPoseAt=0,posePeople=[],chosenPose=-1,chosenPoseAnchor=null,poseMaskCanvases=[],isoBlurCanvas=document.createElement('canvas'),isoBlurCtx=isoBlurCanvas.getContext('2d'),isoMaskCanvas=document.createElement('canvas'),isoMaskCtx=isoMaskCanvas.getContext('2d'),isoLayer=document.createElement('canvas'),isoLayerCtx=isoLayer.getContext('2d'),isoUnion=document.createElement('canvas'),isoUnionCtx=isoUnion.getContext('2d'),isoOther=document.createElement('canvas'),isoOtherCtx=isoOther.getContext('2d'),isoPlate=document.createElement('canvas'),isoPlateCtx=isoPlate.getContext('2d',{willReadFrequently:true}),isoKnown=document.createElement('canvas'),isoKnownCtx=isoKnown.getContext('2d',{willReadFrequently:true}),isoFrame=document.createElement('canvas'),isoFrameCtx=isoFrame.getContext('2d');
 let maskLevel=.50,edgeSoft=.12,maskCanvas=document.createElement('canvas'),maskCtx=maskCanvas.getContext('2d',{willReadFrequently:true}),stickerLibrary=[],activeSticker=null;
 const bsc=document.createElement('canvas'),bsx=bsc.getContext('2d'),cvs=$('#cv'),cx=cvs.getContext('2d'),bgv=$('#bgv'),pc=document.createElement('canvas'),pcx=pc.getContext('2d'),dc=document.createElement('canvas'),dx=dc.getContext('2d');
 
@@ -378,8 +378,14 @@ $('#reset3D').onclick=()=>{rotX3=rotY3=rotZ3=0;flipX3=flipY3=false;['rotX','rotY
 $('#maskLevel').oninput=e=>{maskLevel=+e.target.value/100;$('#maskLevelText').textContent=e.target.value+'%'};
 $('#edgeSoft').oninput=e=>{edgeSoft=+e.target.value/100;$('#edgeSoftText').textContent=e.target.value+'%'};
 $('#flip').onclick=async()=>{
- if(!running)return;const prev=facing;facing=facing==='user'?'environment':'user';flash('جاري قلب الكاميرا...');gen++;lastSeen=0;if(rec&&rec.state==='recording'){rec.pause();setStatus(false)}
- try{await startCam()}catch(e){facing=prev;try{await startCam()}catch(e2){}flash('تعذّر فتح الكاميرا الأخرى')}
+ if(!running)return;
+ const prev=facing,wasRecording=!!(rec&&rec.state==='recording');
+ facing=facing==='user'?'environment':'user';
+ flash('جاري قلب الكاميرا...');gen++;lastSeen=0;
+ // المسجّل يأخذ الفيديو من لوحة canvas، لا من مسار الكاميرا مباشرة؛ لذلك لا نوقفه عند تبديل الكاميرا.
+ try{await startCam();}
+ catch(e){facing=prev;try{await startCam()}catch(e2){}flash('تعذّر فتح الكاميرا الأخرى');}
+ if(wasRecording&&rec&&rec.state==='paused'){try{rec.resume();setStatus(true)}catch(e){flash('تم تبديل الكاميرا لكن تعذّر استئناف التسجيل تلقائيًا')}}
  look(++gen);
  if(!astream||astream.getAudioTracks().some(t=>t.readyState!=='live'))mic();
 };
@@ -471,7 +477,7 @@ function startRecorder(){
    rec.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data)};
    rec.onerror=e=>{note('حدث خطأ في المسجّل: '+(e.error?.message||'تحقق من مساحة التخزين ودعم المتصفح'));console.error(e)};
    rec.onstart=()=>{if(manualRecording&&rec.state==='paused'){rec.resume();setStatus(true)}};
-   rec.start(1000);rec.pause();setStatus(false);$('#manualRec').textContent='بدء التسجيل المستمر';look(++gen);
+   rec.start(1000);if(manualRecording){setStatus(true);$('#manualRec').textContent='إيقاف التسجيل المستمر'}else{rec.pause();setStatus(false);$('#manualRec').textContent='بدء التسجيل المستمر'}look(++gen);
   }},100);
 }
 function rebuild(){
@@ -494,10 +500,10 @@ async function reorient(){
  }
  // لا نوقف MediaRecorder ولا نعيد فتح الكاميرا عند تدوير الهاتف؛ يستمر نفس المقطع.
 }
-let rto;window.addEventListener('resize',()=>{clearTimeout(rto);rto=setTimeout(reorient,500)});
+let rto;const onViewportChange=()=>{clearTimeout(rto);rto=setTimeout(reorient,350)};window.addEventListener('resize',onViewportChange);window.addEventListener('orientationchange',onViewportChange);if(screen.orientation&&screen.orientation.addEventListener)screen.orientation.addEventListener('change',onViewportChange);
 function beginRec(){
  mime=['video/mp4','video/webm;codecs=vp9,opus','video/webm'].find(m=>MediaRecorder.isTypeSupported(m))||'';
- chunks=[];recMs=0;lastSeen=0;lastBox=null;manualRecording=false;running=true;rec=null;cvs.width=0;drawOn=true;updPrev();requestAnimationFrame(paint);
+ chunks=[];recMs=0;lastSeen=Date.now();lastBox=null;manualRecording=true;running=true;rec=null;cvs.width=0;drawOn=true;updPrev();requestAnimationFrame(paint);
  startRecorder();
  clearInterval(timer);timer=setInterval(()=>{if(rec&&rec.state==='recording')recMs+=500;dbgUpd();const s=Math.floor(recMs/1000);$('#tm').textContent=String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')},500);
  if(navigator.wakeLock)navigator.wakeLock.request('screen').then(x=>wake=x).catch(()=>{});
@@ -552,6 +558,7 @@ async function getVisionModule(){
  if(!visionModulePromise)visionModulePromise=(async()=>{
   const urls=[
    'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/vision_bundle.mjs',
+   'https://unpkg.com/@mediapipe/tasks-vision@0.10.22/vision_bundle.mjs',
    'https://esm.sh/@mediapipe/tasks-vision@0.10.22',
    'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/+esm'
   ];
@@ -576,15 +583,49 @@ async function loadPoseTask(){
  catch(e){poseTask=await PoseLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:model,delegate:'CPU'},runningMode:'VIDEO',numPoses:5,outputSegmentationMasks:true});}
  return poseTask;
 }
+function snapshotPoseResults(r){
+ const out=[];
+ const landmarks=r.landmarks||[],masks=r.segmentationMasks||[];
+ for(let i=0;i<landmarks.length;i++){
+  const bounds=poseBounds(landmarks[i]);if(!bounds)continue;
+  let maskCanvas=null;
+  const mask=masks[i];
+  if(mask){
+   try{
+    const w=mask.width,h=mask.height,values=mask.getAsFloat32Array();
+    if(w>0&&h>0&&values&&values.length>=w*h){
+     maskCanvas=document.createElement('canvas');maskCanvas.width=w;maskCanvas.height=h;
+     const mctx=maskCanvas.getContext('2d');const image=mctx.createImageData(w,h),d=image.data;
+     for(let k=0,j=0;k<w*h;k++,j+=4){const a=Math.max(0,Math.min(255,Math.round(values[k]*255)));d[j]=d[j+1]=d[j+2]=255;d[j+3]=a;}
+     mctx.putImageData(image,0,0);
+    }
+   }catch(e){maskCanvas=null;}
+  }
+  out.push({bounds,mask:maskCanvas});
+ }
+ return out;
+}
 function poseBounds(lm){const pts=(lm||[]).filter(p=>p&&Number.isFinite(p.x)&&Number.isFinite(p.y));if(!pts.length)return null;let x0=1,y0=1,x1=0,y1=0;for(const p of pts){x0=Math.min(x0,p.x);y0=Math.min(y0,p.y);x1=Math.max(x1,p.x);y1=Math.max(y1,p.y)}const pad=.06;return{x:Math.max(0,x0-pad),y:Math.max(0,y0-pad),w:Math.min(1,x1-x0+pad*2),h:Math.min(1,y1-y0+pad*2)}}
-function updatePoseButtons(){const host=$('#isolatePeople');host.innerHTML='';posePeople.forEach((p,i)=>{const b=document.createElement('button');b.type='button';b.textContent='شخص '+(i+1);b.className=i===chosenPose?'active':'';b.onclick=()=>{chosenPose=i;updatePoseButtons();$('#isolateStatus').textContent='تم اختيار الشخص '+(i+1)};host.appendChild(b)});}
-async function scanPoseNow(){if(!running)return;try{await loadPoseTask();const v=$('#v');if(v.readyState<2)return;const r=poseTask.detectForVideo(v,performance.now());posePeople=(r.landmarks||[]).map((lm,i)=>({bounds:poseBounds(lm),mask:r.segmentationMasks&&r.segmentationMasks[i]})).filter(p=>p.bounds);updatePoseButtons();$('#isolateStatus').textContent=posePeople.length?'تم اكتشاف '+posePeople.length+' أشخاص. اضغط على الشخص في الصورة لاختياره.':'لم يتم اكتشاف أشخاص بوضوح.';if(r.close)r.close();}catch(e){$('#isolateStatus').textContent='تعذّر تشغيل اكتشاف الأشخاص: '+(e.message||e).toString().slice(0,90)}}
+function setPosePeople(next){
+ posePeople=next||[];
+ if(chosenPoseAnchor&&posePeople.length){
+  let best=-1,dist=Infinity;
+  posePeople.forEach((p,i)=>{const q=p.bounds,cx=q.x+q.w/2,cy=q.y+q.h/2,d=Math.hypot(cx-chosenPoseAnchor.x,cy-chosenPoseAnchor.y);if(d<dist){dist=d;best=i;}});
+  if(best>=0&&dist<.42)chosenPose=best;else chosenPose=-1;
+ }
+ if(chosenPose>=posePeople.length)chosenPose=posePeople.length?0:-1;
+ if(chosenPose>=0&&posePeople[chosenPose]){const q=posePeople[chosenPose].bounds;chosenPoseAnchor={x:q.x+q.w/2,y:q.y+q.h/2};}
+ updatePoseButtons();
+}
+function rememberChosenPose(i){chosenPose=i;const q=posePeople[i]?.bounds;if(q)chosenPoseAnchor={x:q.x+q.w/2,y:q.y+q.h/2};updatePoseButtons();}
+function updatePoseButtons(){const host=$('#isolatePeople');host.innerHTML='';posePeople.forEach((p,i)=>{const b=document.createElement('button');b.type='button';b.textContent='شخص '+(i+1);b.className=i===chosenPose?'active':'';b.onclick=()=>{rememberChosenPose(i);$('#isolateStatus').textContent='تم اختيار الشخص '+(i+1)};host.appendChild(b)});}
+async function scanPoseNow(){if(!running)return;try{await loadPoseTask();const v=$('#v');if(v.readyState<2)return;const r=poseTask.detectForVideo(v,performance.now());setPosePeople(snapshotPoseResults(r));$('#isolateStatus').textContent=posePeople.length?'تم اكتشاف '+posePeople.length+' أشخاص. اضغط على الشخص في الصورة لاختياره.':'لم يتم اكتشاف أشخاص بوضوح.';if(r.close)r.close();}catch(e){$('#isolateStatus').textContent='تعذّر تشغيل اكتشاف الأشخاص: '+(e.message||e).toString().slice(0,90)}}
 $('#scanPeople').onclick=scanPoseNow;
-$('#toggleIsolation').onclick=async()=>{if(isolationOn){isolationOn=false;$('#toggleIsolation').textContent='إزالة باقي الشخصيات';$('#isolateStatus').textContent='تم استرجاع جميع الشخصيات';return}try{await loadPoseTask();if(!posePeople.length)await scanPoseNow();if(chosenPose<0&&posePeople.length)chosenPose=0;if(!posePeople.length){$('#isolateStatus').textContent='لم يتم العثور على شخص. اضغط اكتشاف الأشخاص أولاً.';return}isolationOn=true;resetIsolationPlate();$('#toggleIsolation').textContent='إظهار باقي الشخصيات';$('#isolateStatus').textContent='إزالة الشخصيات تعمل — ثبّت الكاميرا ليتعلم التطبيق الخلفية، واضغط الزر مجددًا لاسترجاع الجميع';}catch(e){$('#isolateStatus').textContent='تعذّر تحميل نموذج العزل. تحقق من الإنترنت.'}};
-$('#clearIsolation').onclick=()=>{isolationOn=false;chosenPose=-1;posePeople=[];updatePoseButtons();$('#toggleIsolation').textContent='إزالة باقي الشخصيات';$('#isolateStatus').textContent='تم إلغاء الاختيار والعزل وإظهار باقي الشخصيات'};
-cvs.addEventListener('click',e=>{if(!isolationOn||!posePeople.length)return;const r=cvs.getBoundingClientRect();let x=(e.clientX-r.left)/r.width,y=(e.clientY-r.top)/r.height; // عكس دوران ومرآة المعاينة
+$('#toggleIsolation').onclick=async()=>{if(isolationOn){isolationOn=false;$('#toggleIsolation').textContent='إزالة باقي الشخصيات';$('#isolateStatus').textContent='تم استرجاع جميع الشخصيات';return}try{await loadPoseTask();if(!posePeople.length)await scanPoseNow();if(chosenPose<0&&posePeople.length)rememberChosenPose(0);if(!posePeople.length){$('#isolateStatus').textContent='لم يتم العثور على شخص. اضغط اكتشاف الأشخاص أولاً.';return}if(!posePeople.some(p=>p.mask)){ $('#isolateStatus').textContent='اكتشف التطبيق الأشخاص لكن لم يستطع استخراج أقنعة منفصلة لهم على هذا الجهاز.'; return; } isolationOn=true;resetIsolationPlate();$('#toggleIsolation').textContent='إظهار باقي الشخصيات';$('#isolateStatus').textContent='بدأت معالجة إخفاء الأشخاص. ستُملأ فقط المناطق التي ظهرت خلفيتها سابقًا؛ لا يمكن استعادة أجزاء لم تظهر للكاميرا.';}catch(e){$('#isolateStatus').textContent='تعذّر تحميل نموذج العزل. تحقق من الإنترنت.'}};
+$('#clearIsolation').onclick=()=>{isolationOn=false;chosenPose=-1;chosenPoseAnchor=null;posePeople=[];updatePoseButtons();$('#toggleIsolation').textContent='إزالة باقي الشخصيات';$('#isolateStatus').textContent='تم إلغاء الاختيار والعزل وإظهار باقي الشخصيات'};
+cvs.addEventListener('click',e=>{if(!posePeople.length)return;const r=cvs.getBoundingClientRect();let x=(e.clientX-r.left)/r.width,y=(e.clientY-r.top)/r.height; // عكس دوران ومرآة المعاينة
  let a=x-.5,b=y-.5,ang=-(ROT+ROLL)*Math.PI/180;let nx=a*Math.cos(ang)-b*Math.sin(ang),ny=a*Math.sin(ang)+b*Math.cos(ang);if(MIR)nx=-nx;x=nx+.5;y=ny+.5;
- let best=-1,bd=1e9;posePeople.forEach((p,i)=>{const q=p.bounds,inside=x>=q.x&&x<=q.x+q.w&&y>=q.y&&y<=q.y+q.h;const d=Math.hypot(x-(q.x+q.w/2),y-(q.y+q.h/2));if(inside||d<bd){bd=inside?0:d;best=i}});if(best>=0){chosenPose=best;updatePoseButtons();$('#isolateStatus').textContent='تم اختيار الشخص '+(best+1)}});
+ let best=-1,bd=1e9;posePeople.forEach((p,i)=>{const q=p.bounds,inside=x>=q.x&&x<=q.x+q.w&&y>=q.y&&y<=q.y+q.h;const d=Math.hypot(x-(q.x+q.w/2),y-(q.y+q.h/2));if(inside||d<bd){bd=inside?0:d;best=i}});if(best>=0){rememberChosenPose(best);$('#isolateStatus').textContent='تم اختيار الشخص '+(best+1)}});
 function resetIsolationPlate(){
  const W=cvs.width||960,H=cvs.height||1280;
  for(const c of [isoUnion,isoOther,isoPlate,isoKnown,isoFrame]){c.width=W;c.height=H}
@@ -592,7 +633,7 @@ function resetIsolationPlate(){
 }
 function drawIsolationOverlay(t){
  const v=$('#v');if(!v.videoWidth||!v.videoHeight)return;
- if(!poseBusy&&t-lastPoseAt>260){poseBusy=true;lastPoseAt=t;(async()=>{try{if(!poseTask)await loadPoseTask();const r=poseTask.detectForVideo(v,performance.now());posePeople=(r.landmarks||[]).map((lm,i)=>({bounds:poseBounds(lm),mask:r.segmentationMasks&&r.segmentationMasks[i]})).filter(p=>p.bounds);if(chosenPose>=posePeople.length)chosenPose=posePeople.length?0:-1;updatePoseButtons();if(r.close)r.close()}catch(e){$('#isolateStatus').textContent='تعذّر تتبع الأشخاص'}finally{poseBusy=false}})()}
+ if(!poseBusy&&t-lastPoseAt>260){poseBusy=true;lastPoseAt=t;(async()=>{try{if(!poseTask)await loadPoseTask();const r=poseTask.detectForVideo(v,performance.now());setPosePeople(snapshotPoseResults(r));if(r.close)r.close()}catch(e){$('#isolateStatus').textContent='تعذّر تتبع الأشخاص'}finally{poseBusy=false}})()}
  if(chosenPose<0||!posePeople.length)return;
  const W=cvs.width,H=cvs.height;if(!W||!H)return;
  if(isoPlate.width!==W||isoPlate.height!==H)resetIsolationPlate();
@@ -602,13 +643,9 @@ function drawIsolationOverlay(t){
  for(let i=0;i<posePeople.length;i++){
   const p=posePeople[i];if(!p.mask)continue;
   try{
-   const mw=p.mask.width,mh=p.mask.height,vals=p.mask.getAsFloat32Array();if(!mw||!mh||!vals)continue;
-   const tmp=document.createElement('canvas');tmp.width=mw;tmp.height=mh;const tc=tmp.getContext('2d');
-   const im=tc.createImageData(mw,mh),d=im.data;
-   for(let k=0,j=0;k<vals.length;k++,j+=4){const a=Math.max(0,Math.min(255,Math.round(vals[k]*255)));d[j]=d[j+1]=d[j+2]=255;d[j+3]=a}
-   tc.putImageData(im,0,0);
-   isoUnionCtx.globalCompositeOperation='lighter';drawV(isoUnionCtx,tmp,mw,mh,DZ,FM);isoUnionCtx.globalCompositeOperation='source-over';
-   if(i!==chosenPose){isoOtherCtx.globalCompositeOperation='lighter';drawV(isoOtherCtx,tmp,mw,mh,DZ,FM);isoOtherCtx.globalCompositeOperation='source-over'}
+   const mw=p.mask.width,mh=p.mask.height;
+   isoUnionCtx.globalCompositeOperation='lighter';drawV(isoUnionCtx,p.mask,mw,mh,DZ,FM);isoUnionCtx.globalCompositeOperation='source-over';
+   if(i!==chosenPose){isoOtherCtx.globalCompositeOperation='lighter';drawV(isoOtherCtx,p.mask,mw,mh,DZ,FM);isoOtherCtx.globalCompositeOperation='source-over'}
   }catch(err){}
  }
  // جمع معلومات الخلفية من البكسلات التي تظهر خالية من جميع الأشخاص.
@@ -712,9 +749,9 @@ async function loadSeg0(){
   if(!image||!image.videoWidth||!image.videoHeight)return;
   const ts=Math.max(performance.now(),lastTimestamp+1);lastTimestamp=ts;
   const result=runner.segmentForVideo(image,ts);
-  const mask=result&&result.categoryMask;if(!mask)return;
+  const mask=result&&result.categoryMask;if(!mask){if(result&&result.close)result.close();return;}
   const mw=mask.width,mh=mask.height,classes=mask.getAsUint8Array();
-  if(!mw||!mh||!classes||classes.length<mw*mh)return;
+  if(!mw||!mh||!classes||classes.length<mw*mh){if(result&&result.close)result.close();return;}
   if(maskOut.width!==mw||maskOut.height!==mh){maskOut.width=mw;maskOut.height=mh}
   const frame=mctx.createImageData(mw,mh),px=frame.data;
   for(let i=0,j=0;i<classes.length;i++,j+=4){
@@ -733,7 +770,8 @@ $('#bgf').onchange=async e=>{
  const f=e.target.files[0];e.target.value='';if(!f)return;
  note('جاري تحميل صورة الخلفية...');
  try{
-  const url=URL.createObjectURL(f);
+  if(bgObjectUrl){URL.revokeObjectURL(bgObjectUrl);bgObjectUrl=null;}
+  const url=URL.createObjectURL(f);bgObjectUrl=url;
   if(f.type.startsWith('video')){bgv.pause();bgv.src=url;bgv.loop=true;bgv.muted=true;bgv.playsInline=true;await new Promise((resolve,reject)=>{bgv.onloadeddata=resolve;bgv.onerror=()=>reject(new Error('تعذّر قراءة فيديو الخلفية'));bgv.load()});await bgv.play();bg=bgv;bgType='video'}
   else{const im=new Image();im.src=url;await im.decode();bg=im;bgType='img'}
   ps=1;pxc=.5;pyc=.5;updPrev();$('#nobg').hidden=false;
@@ -741,7 +779,7 @@ $('#bgf').onchange=async e=>{
   try{await loadSeg();flash('تم تحميل الخلفية وتشغيل فصل الشخص بنجاح.')}catch(segErr){flash('تم تحميل الصورة، لكن تعذّر تشغيل فصل الشخص. تحقق من اتصال الإنترنت ثم أعد المحاولة.');console.error(segErr)}
  }catch(er){clearBg();note('تعذّر فتح ملف الخلفية. جرّب صورة JPG أو PNG أو فيديو MP4.');console.error(er)}
 };
-function clearBg(){bg=null;bgv.pause();$('#nobg').hidden=true;updPrev()}
+function clearBg(){bg=null;bgv.pause();if(bgObjectUrl){URL.revokeObjectURL(bgObjectUrl);bgObjectUrl=null;}bgType='';$('#nobg').hidden=true;updPrev()}
 $('#nobg').onclick=clearBg;
 const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
 $('#pup').onclick=()=>{ps=clamp(ps*1.15,.15,2);flash('حجمك '+Math.round(ps*100)+'%')};
