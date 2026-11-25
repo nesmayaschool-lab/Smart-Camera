@@ -1,4 +1,4 @@
-const CACHE_NAME = 'smart-camera-v3';
+const CACHE_NAME = 'smart-camera-v4';
 self.addEventListener('install', event => {
   self.skipWaiting();
 });

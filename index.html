@@ -133,8 +133,8 @@ textarea.in{min-height:110px;resize:vertical}
  </details>
  <div id="isolatePanel" dir="rtl">
   <b>عزل شخصية من المشهد</b>
-  <p>اضغط على الشخص في معاينة الكاميرا لاختياره، ثم اضغط الزر لإخفاء بقية الأشخاص. اضغط الزر نفسه مرة أخرى لإظهارهم مجددًا. يتم تمويه الأشخاص الآخرين؛ لا يمكن استعادة الخلفية المحجوبة بدقة من التصوير المباشر.</p>
-  <div class="scrow"><button id="scanPeople" type="button">اكتشاف الأشخاص</button><button id="toggleIsolation" type="button">إخفاء باقي الشخصيات</button><button id="clearIsolation" type="button">إلغاء</button></div>
+  <p>اضغط على الشخص في معاينة الكاميرا لاختياره، ثم اضغط الزر لإخفاء بقية الأشخاص. اضغط الزر نفسه مرة أخرى لإظهارهم مجددًا. يحاول التطبيق إزالة الأشخاص الآخرين باستخدام أجزاء الخلفية التي تظهر خالية منهم أثناء التصوير. ثبّت الكاميرا وانتظر حتى تتجمع معلومات كافية؛ المناطق التي لا تظهر خلفيتها قد لا تُستعاد بدقة.</p>
+  <div class="scrow"><button id="scanPeople" type="button">اكتشاف الأشخاص</button><button id="toggleIsolation" type="button">إزالة باقي الشخصيات</button><button id="clearIsolation" type="button">إلغاء</button></div>
   <small id="isolateStatus">الميزة متوقفة</small><div id="isolatePeople"></div>
  </div>
  <details class="quality"><summary>تنقية الخلفية والرتوش</summary>
@@ -155,7 +155,8 @@ textarea.in{min-height:110px;resize:vertical}
 <p id="bgm"></p>
 <div class="bar" style="flex-wrap:wrap"><button id="flip" style="flex:1 1 30%">قلب الكاميرا</button><button id="rot2" style="flex:1 1 30%">تدوير الصورة</button><button id="mir2" style="flex:1 1 30%">مرآة (عكس اليمين)</button><button id="fill" style="flex:1 1 30%">حجم الصورة: ملء الشاشة</button><button id="bg" style="flex:1 1 30%">الخلفية</button><button id="nobg" hidden style="flex:1 1 100%">بدون خلفية</button></div>
 <button id="dat">البيانات والاستيكرات</button>
-<button class="stop" id="end">إنهاء التصوير</button>
+<button id="manualRec" type="button">بدء التسجيل المستمر</button>
+<button class="stop" id="end">إنهاء التصوير وحفظ الفيديو</button>
 <p id="dbg" style="font-size:12px;color:#9ca3af;min-height:14px"></p>
 </div>
 </section>
@@ -223,13 +224,13 @@ const LV=[{n:'دقيقة',th:.5,loose:.65},{n:'متوسطة',th:.6,loose:.8},{n:
 const GR=[250,700,1500,3000],GRL=['فوري','قصيرة','ثانية ونصف','3 ثوانٍ'];
 let gri=+(localStorage.getItem('gr2')||0);if(!(gri>=0&&gri<GR.length))gri=0;
 let lv=+(localStorage.getItem('lv')||1);if(!(lv>=0&&lv<3))lv=1;
-let refs=[],ready=false,stream,astream,rec,chunks=[],running=false,lastSeen=0,facing='environment',recMs=0,timer,vids=[],wake,mime='';
+let refs=[],ready=false,stream,astream,rec,chunks=[],running=false,lastSeen=0,facing='environment',recMs=0,timer,vids=[],wake,mime='',manualRecording=false;
 let lastBox=null,lastT=0,lastVer=0,lastLearn=0,zoom=1,DZ=.82,drawOn=false,gen=0,errN=0,zt;
 let FM=+(localStorage.getItem('fm3')||0),people=[],sel=new Set(),base=0,dataset=null,ROT=0,ROLL=0,MIR=false,theme=+(localStorage.getItem('theme1')||0),selCols=new Set();
 let actx,dest,gn,msrc,vol=1,muted=false;
 let bg=null,bgType='',seg=null,segBusy=false,lastSeg=0,ps=.6,pxc=.5,pyc=.6,ovl=null,lastPaint=0,curS='home';
 let selectedCameraId='',networkMode=false,networkObjectUrl='',rotX3=0,rotY3=0,rotZ3=0,flipX3=false,flipY3=false;
-let isolationOn=false,poseTask=null,poseBusy=false,lastPoseAt=0,posePeople=[],chosenPose=-1,poseMaskCanvases=[],isoBlurCanvas=document.createElement('canvas'),isoBlurCtx=isoBlurCanvas.getContext('2d'),isoMaskCanvas=document.createElement('canvas'),isoMaskCtx=isoMaskCanvas.getContext('2d'),isoLayer=document.createElement('canvas'),isoLayerCtx=isoLayer.getContext('2d');
+let isolationOn=false,poseTask=null,poseBusy=false,lastPoseAt=0,posePeople=[],chosenPose=-1,poseMaskCanvases=[],isoBlurCanvas=document.createElement('canvas'),isoBlurCtx=isoBlurCanvas.getContext('2d'),isoMaskCanvas=document.createElement('canvas'),isoMaskCtx=isoMaskCanvas.getContext('2d'),isoLayer=document.createElement('canvas'),isoLayerCtx=isoLayer.getContext('2d'),isoUnion=document.createElement('canvas'),isoUnionCtx=isoUnion.getContext('2d'),isoOther=document.createElement('canvas'),isoOtherCtx=isoOther.getContext('2d'),isoPlate=document.createElement('canvas'),isoPlateCtx=isoPlate.getContext('2d',{willReadFrequently:true}),isoKnown=document.createElement('canvas'),isoKnownCtx=isoKnown.getContext('2d',{willReadFrequently:true}),isoFrame=document.createElement('canvas'),isoFrameCtx=isoFrame.getContext('2d');
 let maskLevel=.50,edgeSoft=.12,maskCanvas=document.createElement('canvas'),maskCtx=maskCanvas.getContext('2d',{willReadFrequently:true}),stickerLibrary=[],activeSticker=null;
 const bsc=document.createElement('canvas'),bsx=bsc.getContext('2d'),cvs=$('#cv'),cx=cvs.getContext('2d'),bgv=$('#bgv'),pc=document.createElement('canvas'),pcx=pc.getContext('2d'),dc=document.createElement('canvas'),dx=dc.getContext('2d');
 
@@ -468,8 +469,9 @@ function startRecorder(){
    const out=new MediaStream([...cvs.captureStream(30).getVideoTracks(),...(dest?dest.stream.getAudioTracks():[])]);
    rec=new MediaRecorder(out,mime?{mimeType:mime,videoBitsPerSecond:2.5e6}:{videoBitsPerSecond:2.5e6});
    rec.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data)};
-   rec.onerror=()=>note('حدث خطأ في المسجّل');
-   rec.start(1000);rec.pause();setStatus(false);look(++gen);
+   rec.onerror=e=>{note('حدث خطأ في المسجّل: '+(e.error?.message||'تحقق من مساحة التخزين ودعم المتصفح'));console.error(e)};
+   rec.onstart=()=>{if(manualRecording&&rec.state==='paused'){rec.resume();setStatus(true)}};
+   rec.start(1000);rec.pause();setStatus(false);$('#manualRec').textContent='بدء التسجيل المستمر';look(++gen);
   }},100);
 }
 function rebuild(){
@@ -482,24 +484,26 @@ function rebuild(){
 }
 function dbgUpd(){const v=$('#v');$('#dbg').textContent='كاميرا '+v.videoWidth+'×'+v.videoHeight+' | شاشة '+(por()?'عمودي':'أفقي')+' | تدوير '+ROT+'° | لوحة '+cvs.width+'×'+cvs.height+' | عرض '+(FM===0?'كامل':FM===1?'متوسط':'ملء')}
 async function reorient(){
- if(!running||!rec||!cvs.width)return;
- if(por()===(cvs.height>=cvs.width))return;
- if(recMs===0&&chunks.length===0){ // لم يُسجَّل شيء بعد: نعيد الإعداد بالاتجاه الجديد
-  try{rec.ondataavailable=null;rec.onstop=null;if(rec.state!=='inactive')rec.stop()}catch(e){}
-  rec=null;gen++;cvs.width=0;
-  try{await startCam()}catch(e){}
-  startRecorder();
- }else flash('غيّرتَ اتجاه الجوال أثناء التسجيل. أنهِ الفيديو وابدأ من جديد ليأخذ الاتجاه الجديد.');
+ if(!running||!rec)return;
+ const oldW=cvs.width,oldH=cvs.height;
+ if(!setCanvasSize())return;
+ if(cvs.width!==oldW||cvs.height!==oldH){
+  if(isolationOn)resetIsolationPlate();
+  lastPaint=0;dbgUpd();
+  flash(por()?'تم ضبط إطار التسجيل على الوضع الرأسي':'تم ضبط إطار التسجيل على الوضع الأفقي');
+ }
+ // لا نوقف MediaRecorder ولا نعيد فتح الكاميرا عند تدوير الهاتف؛ يستمر نفس المقطع.
 }
 let rto;window.addEventListener('resize',()=>{clearTimeout(rto);rto=setTimeout(reorient,500)});
 function beginRec(){
  mime=['video/mp4','video/webm;codecs=vp9,opus','video/webm'].find(m=>MediaRecorder.isTypeSupported(m))||'';
- chunks=[];recMs=0;lastSeen=0;lastBox=null;running=true;rec=null;cvs.width=0;drawOn=true;updPrev();requestAnimationFrame(paint);
+ chunks=[];recMs=0;lastSeen=0;lastBox=null;manualRecording=false;running=true;rec=null;cvs.width=0;drawOn=true;updPrev();requestAnimationFrame(paint);
  startRecorder();
  clearInterval(timer);timer=setInterval(()=>{if(rec&&rec.state==='recording')recMs+=500;dbgUpd();const s=Math.floor(recMs/1000);$('#tm').textContent=String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')},500);
  if(navigator.wakeLock)navigator.wakeLock.request('screen').then(x=>wake=x).catch(()=>{});
 }
 function setStatus(on){$('#st').className='pill'+(on?' on':'');$('#stt').textContent=on?'التسجيل شغال':'متوقف: بانتظار الشخص'}
+$('#manualRec').onclick=()=>{if(!rec||rec.state==='inactive'){flash('المسجّل لم يجهز بعد. انتظر لحظة ثم جرّب.');return}manualRecording=!manualRecording;if(manualRecording){lastSeen=Date.now();if(rec.state==='paused')rec.resume();setStatus(true);$('#manualRec').textContent='إيقاف التسجيل المستمر';flash('بدأ التسجيل المستمر حتى لو لم يتعرف التطبيق على الوجه.')}else{if(rec.state==='recording')rec.pause();setStatus(false);$('#manualRec').textContent='بدء التسجيل المستمر';flash('تم إيقاف التسجيل مؤقتًا.')} };
 
 /* ---------- التعرف على الشخص (خفيف: صورة مصغّرة + فحص كامل كل 1.5 ثانية فقط) ---------- */
 const timeout=ms=>new Promise((_,rj)=>setTimeout(()=>rj(new Error('timeout')),ms));
@@ -528,8 +532,8 @@ async function look(g){
     else h=sc.filter(x=>x.e<L.loose&&nearLast(x.d.detection.box,now)).sort((a,b)=>a.e-b.e)[0];
     if(h){hit=true;lastBox=h.d.detection.box;lastT=now;lastVer=now}
    }
-   if(hit){lastSeen=now;if(rec.state==='paused'){rec.resume();setStatus(true)}}
-   else if(rec.state==='recording'&&now-lastSeen>GR[gri]){rec.pause();setStatus(false)}
+   if(hit){lastSeen=now;if(rec.state==='paused'){rec.resume();setStatus(true);$('#manualRec').textContent='إيقاف التسجيل المستمر'}}
+   else if(!manualRecording&&rec.state==='recording'&&now-lastSeen>GR[gri]){rec.pause();setStatus(false);$('#manualRec').textContent='بدء التسجيل المستمر'}
    if(rec.state==='paused')$('#stt').textContent='متوقف: '+(n?'أرى '+n+' وجه وليس الشخص المطلوب':'لا أرى أي وجه');
    if(!calibrated){if(ms>=.6){calibrated=true;try{localStorage.setItem('rot2_'+facing,ROT)}catch(e){}}else if(++calN>=4){calN=0;await calib(v)}}
    errN=0;
@@ -543,32 +547,87 @@ async function look(g){
 }
 
 /* ---------- عزل شخص محدد أثناء التصوير المباشر ---------- */
+let visionModulePromise=null;
+async function getVisionModule(){
+ if(!visionModulePromise)visionModulePromise=(async()=>{
+  const urls=[
+   'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/vision_bundle.mjs',
+   'https://esm.sh/@mediapipe/tasks-vision@0.10.22',
+   'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/+esm'
+  ];
+  let last;for(const url of urls){try{return await import(url)}catch(e){last=e}}
+  throw new Error('تعذّر تحميل مكتبة MediaPipe من مصادرها المتاحة: '+(last?.message||last));
+ })().catch(e=>{visionModulePromise=null;throw e});
+ return visionModulePromise;
+}
+async function createVisionFileset(FilesetResolver){
+ const bases=[
+  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm',
+  'https://unpkg.com/@mediapipe/tasks-vision@0.10.22/wasm'
+ ];let last;for(const base of bases){try{return await FilesetResolver.forVisionTasks(base)}catch(e){last=e}}
+ throw last||new Error('تعذّر تحميل ملفات MediaPipe WASM');
+}
 async function loadPoseTask(){
  if(poseTask)return poseTask;
- const {FilesetResolver,PoseLandmarker}=await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/+esm');
- const vision=await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm');
- try{poseTask=await PoseLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',delegate:'GPU'},runningMode:'VIDEO',numPoses:5,outputSegmentationMasks:true});}
- catch(e){poseTask=await PoseLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',delegate:'CPU'},runningMode:'VIDEO',numPoses:5,outputSegmentationMasks:true});}
+ const {FilesetResolver,PoseLandmarker}=await getVisionModule();
+ const vision=await createVisionFileset(FilesetResolver);
+ const model='https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task';
+ try{poseTask=await PoseLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:model,delegate:'GPU'},runningMode:'VIDEO',numPoses:5,outputSegmentationMasks:true});}
+ catch(e){poseTask=await PoseLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:model,delegate:'CPU'},runningMode:'VIDEO',numPoses:5,outputSegmentationMasks:true});}
  return poseTask;
 }
 function poseBounds(lm){const pts=(lm||[]).filter(p=>p&&Number.isFinite(p.x)&&Number.isFinite(p.y));if(!pts.length)return null;let x0=1,y0=1,x1=0,y1=0;for(const p of pts){x0=Math.min(x0,p.x);y0=Math.min(y0,p.y);x1=Math.max(x1,p.x);y1=Math.max(y1,p.y)}const pad=.06;return{x:Math.max(0,x0-pad),y:Math.max(0,y0-pad),w:Math.min(1,x1-x0+pad*2),h:Math.min(1,y1-y0+pad*2)}}
 function updatePoseButtons(){const host=$('#isolatePeople');host.innerHTML='';posePeople.forEach((p,i)=>{const b=document.createElement('button');b.type='button';b.textContent='شخص '+(i+1);b.className=i===chosenPose?'active':'';b.onclick=()=>{chosenPose=i;updatePoseButtons();$('#isolateStatus').textContent='تم اختيار الشخص '+(i+1)};host.appendChild(b)});}
 async function scanPoseNow(){if(!running)return;try{await loadPoseTask();const v=$('#v');if(v.readyState<2)return;const r=poseTask.detectForVideo(v,performance.now());posePeople=(r.landmarks||[]).map((lm,i)=>({bounds:poseBounds(lm),mask:r.segmentationMasks&&r.segmentationMasks[i]})).filter(p=>p.bounds);updatePoseButtons();$('#isolateStatus').textContent=posePeople.length?'تم اكتشاف '+posePeople.length+' أشخاص. اضغط على الشخص في الصورة لاختياره.':'لم يتم اكتشاف أشخاص بوضوح.';if(r.close)r.close();}catch(e){$('#isolateStatus').textContent='تعذّر تشغيل اكتشاف الأشخاص: '+(e.message||e).toString().slice(0,90)}}
 $('#scanPeople').onclick=scanPoseNow;
-$('#toggleIsolation').onclick=async()=>{if(isolationOn){isolationOn=false;$('#toggleIsolation').textContent='إخفاء باقي الشخصيات';$('#isolateStatus').textContent='تم إظهار باقي الشخصيات مرة أخرى';return}try{await loadPoseTask();if(!posePeople.length)await scanPoseNow();if(chosenPose<0&&posePeople.length)chosenPose=0;if(!posePeople.length){$('#isolateStatus').textContent='لم يتم العثور على شخص. اضغط اكتشاف الأشخاص أولاً.';return}isolationOn=true;$('#toggleIsolation').textContent='إظهار باقي الشخصيات';$('#isolateStatus').textContent='العزل يعمل — اضغط الزر نفسه لإظهار باقي الشخصيات مرة أخرى';}catch(e){$('#isolateStatus').textContent='تعذّر تحميل نموذج العزل. تحقق من الإنترنت.'}};
-$('#clearIsolation').onclick=()=>{isolationOn=false;chosenPose=-1;posePeople=[];updatePoseButtons();$('#toggleIsolation').textContent='إخفاء باقي الشخصيات';$('#isolateStatus').textContent='تم إلغاء الاختيار والعزل وإظهار باقي الشخصيات'};
+$('#toggleIsolation').onclick=async()=>{if(isolationOn){isolationOn=false;$('#toggleIsolation').textContent='إزالة باقي الشخصيات';$('#isolateStatus').textContent='تم استرجاع جميع الشخصيات';return}try{await loadPoseTask();if(!posePeople.length)await scanPoseNow();if(chosenPose<0&&posePeople.length)chosenPose=0;if(!posePeople.length){$('#isolateStatus').textContent='لم يتم العثور على شخص. اضغط اكتشاف الأشخاص أولاً.';return}isolationOn=true;resetIsolationPlate();$('#toggleIsolation').textContent='إظهار باقي الشخصيات';$('#isolateStatus').textContent='إزالة الشخصيات تعمل — ثبّت الكاميرا ليتعلم التطبيق الخلفية، واضغط الزر مجددًا لاسترجاع الجميع';}catch(e){$('#isolateStatus').textContent='تعذّر تحميل نموذج العزل. تحقق من الإنترنت.'}};
+$('#clearIsolation').onclick=()=>{isolationOn=false;chosenPose=-1;posePeople=[];updatePoseButtons();$('#toggleIsolation').textContent='إزالة باقي الشخصيات';$('#isolateStatus').textContent='تم إلغاء الاختيار والعزل وإظهار باقي الشخصيات'};
 cvs.addEventListener('click',e=>{if(!isolationOn||!posePeople.length)return;const r=cvs.getBoundingClientRect();let x=(e.clientX-r.left)/r.width,y=(e.clientY-r.top)/r.height; // عكس دوران ومرآة المعاينة
  let a=x-.5,b=y-.5,ang=-(ROT+ROLL)*Math.PI/180;let nx=a*Math.cos(ang)-b*Math.sin(ang),ny=a*Math.sin(ang)+b*Math.cos(ang);if(MIR)nx=-nx;x=nx+.5;y=ny+.5;
  let best=-1,bd=1e9;posePeople.forEach((p,i)=>{const q=p.bounds,inside=x>=q.x&&x<=q.x+q.w&&y>=q.y&&y<=q.y+q.h;const d=Math.hypot(x-(q.x+q.w/2),y-(q.y+q.h/2));if(inside||d<bd){bd=inside?0:d;best=i}});if(best>=0){chosenPose=best;updatePoseButtons();$('#isolateStatus').textContent='تم اختيار الشخص '+(best+1)}});
+function resetIsolationPlate(){
+ const W=cvs.width||960,H=cvs.height||1280;
+ for(const c of [isoUnion,isoOther,isoPlate,isoKnown,isoFrame]){c.width=W;c.height=H}
+ isoPlateCtx.clearRect(0,0,W,H);isoKnownCtx.clearRect(0,0,W,H);
+}
 function drawIsolationOverlay(t){
  const v=$('#v');if(!v.videoWidth||!v.videoHeight)return;
  if(!poseBusy&&t-lastPoseAt>260){poseBusy=true;lastPoseAt=t;(async()=>{try{if(!poseTask)await loadPoseTask();const r=poseTask.detectForVideo(v,performance.now());posePeople=(r.landmarks||[]).map((lm,i)=>({bounds:poseBounds(lm),mask:r.segmentationMasks&&r.segmentationMasks[i]})).filter(p=>p.bounds);if(chosenPose>=posePeople.length)chosenPose=posePeople.length?0:-1;updatePoseButtons();if(r.close)r.close()}catch(e){$('#isolateStatus').textContent='تعذّر تتبع الأشخاص'}finally{poseBusy=false}})()}
  if(chosenPose<0||!posePeople.length)return;
  const W=cvs.width,H=cvs.height;if(!W||!H)return;
- if(isoBlurCanvas.width!==W||isoBlurCanvas.height!==H){isoBlurCanvas.width=W;isoBlurCanvas.height=H;isoMaskCanvas.width=W;isoMaskCanvas.height=H;isoLayer.width=W;isoLayer.height=H}
- const selected=posePeople[chosenPose];
- // احتفظ بالمشهد الأصلي، وغطِّ أقنعة الأشخاص الآخرين بطبقة ضبابية؛ لا نمسّ الخلفية المختارة.
- posePeople.forEach((p,i)=>{if(i===chosenPose||!p.mask)return;try{const mw=p.mask.width,mh=p.mask.height,vals=p.mask.getAsFloat32Array();if(!mw||!mh||!vals)return;const im=isoMaskCtx.createImageData(mw,mh),d=im.data;for(let k=0,j=0;k<vals.length;k++,j+=4){const a=Math.max(0,Math.min(255,Math.round(vals[k]*255)));d[j]=d[j+1]=d[j+2]=255;d[j+3]=a}const tmp=document.createElement('canvas');tmp.width=mw;tmp.height=mh;tmp.getContext('2d').putImageData(im,0,0);isoMaskCtx.setTransform(1,0,0,1,0,0);isoMaskCtx.clearRect(0,0,W,H);drawV(isoMaskCtx,tmp,mw,mh,DZ,FM);isoLayerCtx.setTransform(1,0,0,1,0,0);isoLayerCtx.clearRect(0,0,W,H);isoLayerCtx.save();isoLayerCtx.filter='blur(18px)';drawV(isoLayerCtx,v,v.videoWidth,v.videoHeight,DZ,FM);isoLayerCtx.restore();isoLayerCtx.globalCompositeOperation='destination-in';isoLayerCtx.drawImage(isoMaskCanvas,0,0);isoLayerCtx.globalCompositeOperation='source-over';cx.drawImage(isoLayer,0,0)}catch(err){}});
+ if(isoPlate.width!==W||isoPlate.height!==H)resetIsolationPlate();
+ isoUnionCtx.setTransform(1,0,0,1,0,0);isoUnionCtx.clearRect(0,0,W,H);
+ isoOtherCtx.setTransform(1,0,0,1,0,0);isoOtherCtx.clearRect(0,0,W,H);
+ // نبني أقنعة كل الأشخاص منفصلة، ثم اتحادًا عامًا لمنع تسجيلهم داخل لوحة الخلفية.
+ for(let i=0;i<posePeople.length;i++){
+  const p=posePeople[i];if(!p.mask)continue;
+  try{
+   const mw=p.mask.width,mh=p.mask.height,vals=p.mask.getAsFloat32Array();if(!mw||!mh||!vals)continue;
+   const tmp=document.createElement('canvas');tmp.width=mw;tmp.height=mh;const tc=tmp.getContext('2d');
+   const im=tc.createImageData(mw,mh),d=im.data;
+   for(let k=0,j=0;k<vals.length;k++,j+=4){const a=Math.max(0,Math.min(255,Math.round(vals[k]*255)));d[j]=d[j+1]=d[j+2]=255;d[j+3]=a}
+   tc.putImageData(im,0,0);
+   isoUnionCtx.globalCompositeOperation='lighter';drawV(isoUnionCtx,tmp,mw,mh,DZ,FM);isoUnionCtx.globalCompositeOperation='source-over';
+   if(i!==chosenPose){isoOtherCtx.globalCompositeOperation='lighter';drawV(isoOtherCtx,tmp,mw,mh,DZ,FM);isoOtherCtx.globalCompositeOperation='source-over'}
+  }catch(err){}
+ }
+ // جمع معلومات الخلفية من البكسلات التي تظهر خالية من جميع الأشخاص.
+ isoFrameCtx.setTransform(1,0,0,1,0,0);isoFrameCtx.clearRect(0,0,W,H);drawV(isoFrameCtx,v,v.videoWidth,v.videoHeight,DZ,FM);
+ try{
+  const frame=isoFrameCtx.getImageData(0,0,W,H),union=isoUnionCtx.getImageData(0,0,W,H),plate=isoPlateCtx.getImageData(0,0,W,H),known=isoKnownCtx.getImageData(0,0,W,H);
+  for(let i=0;i<frame.data.length;i+=4){if(union.data[i+3]<55){plate.data[i]=frame.data[i];plate.data[i+1]=frame.data[i+1];plate.data[i+2]=frame.data[i+2];plate.data[i+3]=255;known.data[i+3]=255}}
+  isoPlateCtx.putImageData(plate,0,0);isoKnownCtx.putImageData(known,0,0);
+  // استبدال الشخصيات غير المختارة فقط، وفقط حيث توجد عينة خلفية حقيقية من إطار سابق.
+  const other=isoOtherCtx.getImageData(0,0,W,H),knownNow=isoKnownCtx.getImageData(0,0,W,H);
+  for(let i=0;i<other.data.length;i+=4)other.data[i+3]=Math.round(other.data[i+3]*knownNow.data[i+3]/255);
+  isoOtherCtx.putImageData(other,0,0);
+  cx.clearRect(0,0,W,H);cx.drawImage(isoPlate,0,0);
+  // إعادة رسم الفيديو الأصلي عبر قناع معكوس يحافظ على الشخص المختار وباقي المشهد.
+  isoLayerCtx.setTransform(1,0,0,1,0,0);isoLayerCtx.clearRect(0,0,W,H);drawV(isoLayerCtx,v,v.videoWidth,v.videoHeight,DZ,FM);
+  isoLayerCtx.globalCompositeOperation='destination-out';isoLayerCtx.drawImage(isoOther,0,0);isoLayerCtx.globalCompositeOperation='source-over';
+  // نضع الخلفية المتعلمة أولاً ثم الشخص المختار وحده فوقها.
+  cx.drawImage(isoLayer,0,0);
+ }catch(err){$('#isolateStatus').textContent='تعذّرت معالجة الخلفية على هذا الجهاز'}
 }
 
 /* ---------- تبديل الخلفية + تحريك الشخص داخلها ---------- */
@@ -637,8 +696,8 @@ function loadSeg(){if(seg)return Promise.resolve();return segP||(segP=loadSeg0()
 async function loadSeg0(){
  // نموذج جديد متعدد الفئات: background / hair / body-skin / face-skin / clothes / others.
  // نحتفظ بالشعر والجلد والوجه والملابس، ونستبعد فئة accessories/others.
- const {FilesetResolver,ImageSegmenter}=await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/+esm');
- const vision=await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm');
+ const {FilesetResolver,ImageSegmenter}=await getVisionModule();
+ const vision=await createVisionFileset(FilesetResolver);
  const model='https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite';
  let runner;
  try{
@@ -669,17 +728,18 @@ async function loadSeg0(){
   if(result.close)result.close();
  }};
 }
-$('#bg').onclick=()=>{loadSeg().catch(()=>{});$('#bgf').click()};
+$('#bg').onclick=()=>$('#bgf').click();
 $('#bgf').onchange=async e=>{
  const f=e.target.files[0];e.target.value='';if(!f)return;
- note('جاري تجهيز الخلفية... (أول مرة تأخذ وقتاً)');
+ note('جاري تحميل صورة الخلفية...');
  try{
-  await loadSeg();const url=URL.createObjectURL(f);
-  if(f.type.startsWith('video')){bgv.src=url;await bgv.play();bg=bgv;bgType='video'}
+  const url=URL.createObjectURL(f);
+  if(f.type.startsWith('video')){bgv.pause();bgv.src=url;bgv.loop=true;bgv.muted=true;bgv.playsInline=true;await new Promise((resolve,reject)=>{bgv.onloadeddata=resolve;bgv.onerror=()=>reject(new Error('تعذّر قراءة فيديو الخلفية'));bgv.load()});await bgv.play();bg=bgv;bgType='video'}
   else{const im=new Image();im.src=url;await im.decode();bg=im;bgType='img'}
-  ps=1;pxc=.5;pyc=.5;updPrev();$('#nobg').hidden=false;note('');
-  flash('حرّك الشخص بإصبعك، وكبّره بإصبعين أو بزر حجمك');
- }catch(er){clearBg();note('تعذّر تجهيز الخلفية؛ أبقينا الفيديو الأصلي ظاهرًا. تأكد من الإنترنت وجرّب مرة أخرى.')}
+  ps=1;pxc=.5;pyc=.5;updPrev();$('#nobg').hidden=false;
+  note('تم تحميل الخلفية. جاري تشغيل فصل الشخص...');
+  try{await loadSeg();flash('تم تحميل الخلفية وتشغيل فصل الشخص بنجاح.')}catch(segErr){flash('تم تحميل الصورة، لكن تعذّر تشغيل فصل الشخص. تحقق من اتصال الإنترنت ثم أعد المحاولة.');console.error(segErr)}
+ }catch(er){clearBg();note('تعذّر فتح ملف الخلفية. جرّب صورة JPG أو PNG أو فيديو MP4.');console.error(er)}
 };
 function clearBg(){bg=null;bgv.pause();$('#nobg').hidden=true;updPrev()}
 $('#nobg').onclick=clearBg;
@@ -934,20 +994,20 @@ DB.all().then(a=>{vids=a.sort((x,y)=>y.at-x.at).map(o=>({id:o.id,url:URL.createO
 /* ---------- الإنهاء وقائمة الفيديوهات ---------- */
 function finish(){
  return new Promise(res=>{
-  running=false;drawOn=false;gen++;DZ=1;ovl=null;clearBg();clearInterval(timer);$('#dat').textContent='عرض البيانات';
+  running=false;drawOn=false;gen++;DZ=1;ovl=null;manualRecording=false;$('#manualRec').textContent='بدء التسجيل المستمر';clearBg();clearInterval(timer);$('#dat').textContent='عرض البيانات';
   if(wake)wake.release().catch(()=>{});
-  const done=()=>{
+  const done=async()=>{
    if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}
    if(networkMode){$('#v').pause();$('#v').removeAttribute('src');$('#v').load();networkMode=false}
    if(astream){astream.getTracks().forEach(t=>t.stop());astream=null}
    if(rec&&chunks.length&&recMs>0){
     const type=(rec.mimeType||mime||'video/webm').split(';')[0];
     const blob=new Blob(chunks,{type}),o={id:String(Date.now()),ext:type.includes('mp4')?'mp4':'webm',ms:recMs,at:Date.now(),blob};
-    DB.put(o).catch(()=>{});vids.unshift({id:o.id,url:URL.createObjectURL(blob),ext:o.ext,ms:o.ms,at:new Date(o.at)});
+    await DB.put(o);vids.unshift({id:o.id,url:URL.createObjectURL(blob),ext:o.ext,ms:o.ms,at:new Date(o.at)});
    }
    res();
   };
-  if(rec&&rec.state!=='inactive'){rec.onstop=done;rec.stop()}else done();
+  if(rec&&rec.state!=='inactive'){rec.onstop=done;try{if(rec.state==='paused')rec.resume();setTimeout(()=>{try{if(rec&&rec.state==='recording')rec.requestData()}catch(e){};if(rec&&rec.state!=='inactive')rec.stop()},250)}catch(e){rec.stop()}}else done();
  });
 }
 $('#end').onclick=async()=>{const n=vids.length;await finish();show('vids');if(vids.length===n)$('#empty').textContent='لم يظهر الشخص أثناء التصوير، لذلك لم يُحفظ فيديو.';else toast('تم حفظ الفيديو داخل التطبيق. اضغط «حفظ في الجوال» ليظهر في جوالك.')};
